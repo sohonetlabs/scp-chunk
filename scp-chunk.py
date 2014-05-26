@@ -1,193 +1,399 @@
-__author__ = 'pat'
-
+__author__ = 'Pat & Ben'
 #This version
-#TODO - check if destination exists (overwrite logic - how should this behave - scp, just overwrites...)
+#TODO - check if destination exists (overwrite logic - how should this behave
+#       scp, just overwrites...)
 
 #Next iteration
+#TODO - implement password mode, rather than just shared ssh keys
 #TODO - individual md5 check in event of failure / recovery option.
 #TODO - classify main block of code.
 #TODO - What about remote to local copy....?
-#TODO - Implement cipher setting
-
-
+#TODO - Implement cipher setting checking
 
 import os
+import sys
 import argparse
 import subprocess
-from subprocess import CalledProcessError
-import glob
 import hashlib
+from subprocess import CalledProcessError
 from threading import Thread
 from Queue import Queue
-import random
-from time import sleep
+
+default_num_threads = 3
+default_retries = 0
+default_cypher = 'arcfour'
+split_file_basename = 'chunk_'
+
+# see: http://goo.gl/kTQMs
+SYMBOLS = {
+    'customary': ('B', 'K', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y'),
+    'customary_ext': ('byte', 'kilo', 'mega', 'giga', 'tera', 'peta', 'exa',
+                       'zetta', 'iotta'),
+    'iec': ('Bi', 'Ki', 'Mi', 'Gi', 'Ti', 'Pi', 'Ei', 'Zi', 'Yi'),
+    'iec_ext': ('byte', 'kibi', 'mebi', 'gibi', 'tebi', 'pebi', 'exbi',
+                       'zebi', 'yobi'),
+}
+
+
+def bytes2human(n, format='%(value).1f %(symbol)s', symbols='customary'):
+    """
+    Convert n bytes into a human readable string based on format.
+    symbols can be either "customary", "customary_ext", "iec" or "iec_ext",
+    see: http://goo.gl/kTQMs
+
+      >>> bytes2human(0)
+      '0.0 B'
+      >>> bytes2human(0.9)
+      '0.0 B'
+      >>> bytes2human(1)
+      '1.0 B'
+      >>> bytes2human(1.9)
+      '1.0 B'
+      >>> bytes2human(1024)
+      '1.0 K'
+      >>> bytes2human(1048576)
+      '1.0 M'
+      >>> bytes2human(1099511627776127398123789121)
+      '909.5 Y'
+
+      >>> bytes2human(9856, symbols="customary")
+      '9.6 K'
+      >>> bytes2human(9856, symbols="customary_ext")
+      '9.6 kilo'
+      >>> bytes2human(9856, symbols="iec")
+      '9.6 Ki'
+      >>> bytes2human(9856, symbols="iec_ext")
+      '9.6 kibi'
+
+      >>> bytes2human(10000, "%(value).1f %(symbol)s/sec")
+      '9.8 K/sec'
+
+      >>> # precision can be adjusted by playing with %f operator
+      >>> bytes2human(10000, format="%(value).5f %(symbol)s")
+      '9.76562 K'
+    """
+    n = int(n)
+    if n < 0:
+        raise ValueError("n < 0")
+    symbols = SYMBOLS[symbols]
+    prefix = {}
+    for i, s in enumerate(symbols[1:]):
+        prefix[s] = 1 << (i + 1) * 10
+    for symbol in reversed(symbols[1:]):
+        if n >= prefix[symbol]:
+            value = float(n) / prefix[symbol]
+            return format % locals()
+    return format % dict(symbol=symbols[0], value=n)
+
+
+def human2bytes(s):
+    """
+    Attempts to guess the string format based on default symbols
+    set and return the corresponding bytes as an integer.
+    When unable to recognize the format ValueError is raised.
+
+      >>> human2bytes('0 B')
+      0
+      >>> human2bytes('1 K')
+      1024
+      >>> human2bytes('1 M')
+      1048576
+      >>> human2bytes('1 Gi')
+      1073741824
+      >>> human2bytes('1 tera')
+      1099511627776
+
+      >>> human2bytes('0.5kilo')
+      512
+      >>> human2bytes('0.1  byte')
+      0
+      >>> human2bytes('1 k')  # k is an alias for K
+      1024
+      >>> human2bytes('12 foo')
+      Traceback (most recent call last):
+          ...
+      ValueError: can't interpret '12 foo'
+    """
+    init = s
+    num = ""
+    while s and s[0:1].isdigit() or s[0:1] == '.':
+        num += s[0]
+        s = s[1:]
+    num = float(num)
+    letter = s.strip()
+    for name, sset in SYMBOLS.items():
+        if letter in sset:
+            break
+    else:
+        if letter == 'k':
+            # treat 'k' as an alias for 'K' as per: http://goo.gl/kTQMs
+            sset = SYMBOLS['customary']
+            letter = letter.upper()
+        else:
+            raise ValueError("can't interpret %r" % init)
+    prefix = {sset[0]: 1}
+    for i, s in enumerate(sset[1:]):
+        prefix[s] = 1 << (i + 1) * 10
+    return int(num * prefix[letter])
+
+
+def spinning_cursor():
+    while True:
+        for cursor in '|/-\\':
+            yield cursor
+
+spinner = spinning_cursor()
+
+
+def spin(text):
+
+    sys.stdout.write(text + ' ' + spinner.next())
+    sys.stdout.flush()
+    back_spc = (len(text) + 2) * '\b'
+    sys.stdout.write(back_spc)
+
+
+def split_file_and_md5(file_name, prefix, max_size, padding_width=5,
+                       buffer=1024 * 1024 * 5):
+
+    chunks = []
+    file_md5 = hashlib.md5()
+    with open(file_name, 'r+b') as src:
+        suffix = 0
+        while True:
+            chunk_name = prefix + '.%0*d' % (padding_width, suffix)
+            with open(chunk_name, 'w+b') as tgt:
+                chunk_md5 = hashlib.md5()
+                written = 0
+                while written <= max_size:
+                    data = src.read(buffer)
+                    file_md5.update(data)
+                    chunk_md5.update(data)
+                    if data:
+                        tgt.write(data)
+                        written += buffer
+                        spin(chunk_name)
+                    else:
+                        chunks.append((chunk_name, chunk_md5.hexdigest()))
+
+                        return ((file_name, file_md5.hexdigest()), chunks)
+                suffix += 1
+                chunks.append((chunk_name, chunk_md5.hexdigest()))
 
 
 class WorkerThread(Thread):
 
-    def __init__(self, file_queue , dst_file, remote_server):
+    def __init__(self, file_queue, dst_file,
+                 remote_server,
+                 cypher):
+
         Thread.__init__(self)
         self.file_queue = file_queue
         self.dst_file = dst_file
         self.remote_server = remote_server
+        self.cypher = cypher
 
     def run(self):
-         while True:
+        while True:
             if self.file_queue.empty():
-                #out_q.put(None)
-                print "Thread Finishing"
                 return
             else:
                 try:
-                    src_file = self.file_queue.get(timeout=1)
-                    sleep( 2 * random.random())
-                    print "Starting chunk: " + src_file
+                    (src_file, chunk_num, total_chunks, retries) = \
+                                    self.file_queue.get(timeout=1)
+                    print "Starting chunk: " + src_file + ' ' + \
+                          str(chunk_num) + ':' + \
+                          str(total_chunks) + \
+                          ' remaining ' + \
+                          str(self.file_queue.qsize()) + \
+                          ' retries ' + str(retries)
                     res = self.upload_chunk(src_file)
                     if res:
-                        print "Uploaded chunk: " + src_file
+                        print "Finished chunk: " + src_file + ' ' + \
+                              str(chunk_num) + ':' + str(total_chunks) + \
+                              ' remaining ' + str(self.file_queue.qsize())
                         self.file_queue.task_done()
                     else:
-                        print "Re-queuing failed chunk: " + src_file
-                        self.file_queue.put(src_file)
+                        retries = retries - 1
+                        if retries > 0:
+                            print "Re-queuing failed chunk: " + src_file + \
+                                  ' ' + str(chunk_num) + ' retries left ' + \
+                                  str(retries)
+                            self.file_queue.put((src_file, retries))
+                        else:
+                            print "ERROR: FAILED to upload " + src_file + \
+                                  ' ' + str(chunk_num)
                         self.file_queue.task_done()
-                    #out_q.put(res)
-                except self.file_queue.Empty:
-                    return
+                except Exception as inst:
+                    print 'ERROR: in uploading in tread'
+                    retries = retries - 1
+                    if retries > 0:
+                        print "Re-queuing failed chunk: " + src_file + ' ' + \
+                              str(chunk_num) + ' retries left ' + str(retries)
+                        self.file_queue.put((src_file, retries))
+                    else:
+                        print "FAILED to upload " + src_file + ' ' + \
+                              str(chunk_num)
+                    self.file_queue.task_done()
 
     def upload_chunk(self, src_file):
         try:
-            subprocess.check_call(['scp', '-carcfour', '-q' ,'-oBatchMode=yes' , src_file , self.remote_server+':'+self.dst_file])
+            subprocess.check_call(['scp', '-c' + self.cypher, '-q',
+                                   '-oBatchMode=yes', src_file,
+                                   self.remote_server + ':' + self.dst_file])
         except CalledProcessError as e:
             return False
-            #exit(1)
         return True
 
 
-# def upload_chunk((file , dst_file, remote_server)):
-#     try:
-#         #subprocess.call(['scp', '-carcfour', '-f' , self.file , self.remote_server+':'+self.dst_file])
-#         time.sleep(10 * random.random())
-#         subprocess.call(['scp', '-carcfour', '-q' ,'-oBatchMode=yes' , file , remote_server+':'+dst_file])
-#     except CalledProcessError as e:
-#         print(e.returncode)
-#         print "ERROR: "+file +" upload failed"
-#         #exit(1)
-#     print "Uploaded chunk: " + file
-
-
-default_num_chunks=10
-default_chunk_size=200000 #Bytes
-default_num_threads=5
-split_file_basename='split_parts'
-
-
-def getMD5OfFile(filename):
+def get_file_md5(filename, buffer_size=1024 * 1024 * 2):
     """Return the hex digest of a file without loading it all into memory"""
     fh = open(filename)
     digest = hashlib.md5()
     while 1:
-        buf = fh.read(1024*1024*1)
+        buf = fh.read(buffer_size)
         if buf == "":
             break
         digest.update(buf)
     fh.close()
     return str(digest.hexdigest()).lower()
 
-def main():
 
+def main():
     #Read in arguments
-    parser = argparse.ArgumentParser(description='Chunk a file and then kick off multiple SCP threads.'
-                                     'Speeds up transfers over high latency links ')
-    parser.add_argument('-c', help='crypto to send to SSH')
-    parser.add_argument('-C', help='number of chunks (default '+ str(default_num_chunks) + ')')
-    parser.add_argument('-s', help='size of chunks (Bytes)')
-    parser.add_argument('-t', help='number of threads (default '+ str(default_num_threads) + ')')
+    parser = argparse.ArgumentParser(description='Chunk a file and then kick'
+                                                 ' off multiple SCP threads.'
+                                                 'Speeds up transfers over '
+                                                 'high latency links')
+    parser.add_argument('-c', '--cypher',
+                        help='cypher use with from transfer see: ssh',
+                        default=default_cypher,
+                        required=False)
+    parser.add_argument('-s', '--size',
+                        help='size of chunks to transfer.',
+                        default='500M',
+                        required=False)
+    parser.add_argument('-r', '--retries',
+                        help='number of times to retry transfer.',
+                        default=default_retries,
+                        required=False,
+                        type=int)
+    parser.add_argument('-t', '--threads',
+                        help='number of threads (default ' +
+                        str(default_num_threads) + ')',
+                        default=default_num_threads,
+                        required=False,
+                        type=int)
+    #parser.add_argument('-p','--password', help='password',required=False)
     parser.add_argument('src', help='source file')
-    parser.add_argument('srv', help='remote server and user if required')
-    parser.add_argument('dst', help='directory (if remote home dir then specify .)')
+    parser.add_argument('srv',
+                        help='remote server and user if required'
+                             ' e.g foo@example.com')
+    parser.add_argument('dst',
+                        help='directory (if remote home dir then specify . )')
 
     args = parser.parse_args()
-    ssh_crypto = args.c
-    num_chunks = args.C
-    chunk_size = args.s
-    num_threads = args.t
+
+    ssh_crypto = args.cypher
+    try:
+        chunk_size = human2bytes(args.size)
+    except ValueError as e:
+        print 'Invalid chunk size ' + str(e)
+        exit(1)
+    num_threads = args.threads
     src_file = args.src
     dst_file = args.dst
     remote_server = args.srv
-    print args
-
+    retries = args.retries
 
     # Check args for errors + instantiate variables.
     if not os.path.exists(src_file):
-        print 'source file does not exist', src_file
+        print 'Error: Source file does not exist', src_file
         exit(1)
-    if num_chunks and chunk_size:
-        print 'specify a chunk size OR a number of chunks'
-    if num_threads == None:
-        num_threads=default_num_threads
-    else:
-        num_threads = int(num_threads)
 
-    # Take MD5
-    print "taking MD5 of file"
-    src_file_md5 = getMD5OfFile(src_file)
-
-    print "uploading md5 to remote site"
+    # Split file and calc the file md5
+    split_cmd = ''
+    print "spliting file"
+    spinner = spinning_cursor()
+    sys.stdout.write(spinner.next())
+    sys.stdout.flush()
+    sys.stdout.write('\b')
+    (src_file_info, chunk_infos) = split_file_and_md5(src_file,
+                                                      split_file_basename,
+                                                      chunk_size)
+    src_file_md5 = src_file_info[1]
+    print "uploading MD5 (%s) checksum to remote site" % src_file_md5
     try:
-        subprocess.call(['ssh' , remote_server , 'echo', src_file_md5+'\ \ '+src_file+'>'+src_file+'.md5'])
+        subprocess.call(['ssh', remote_server, 'echo', src_file_md5 +
+                         '\ \ ' + src_file + '>' + src_file + '.md5'])
     except CalledProcessError as e:
         print(e.returncode)
         print "ERROR: Couldn't connect to remote server."
         exit(1)
 
-
-    # Split file
-    split_cmd = ''
-    print "spliting file"
-    if chunk_size != None:
-        print "Using manually defined chunk size"
-        split_cmd = ['/usr/bin/split' ,'-b'+str(chunk_size) , src_file , split_file_basename]
-    else:
-        if num_chunks != None:
-            print "Using manually defined number of chunks"
-            statinfo = os.stat(src_file)
-            chunk_size = statinfo.st_size / int(num_chunks)
-            split_cmd = ['/usr/bin/split' ,'-b'+str(chunk_size) , src_file , split_file_basename]
-        else:
-            print "Using default number of chunks"
-            statinfo = os.stat(src_file)
-            chunk_size = statinfo.st_size / default_num_chunks
-            print statinfo.st_size
-            print chunk_size
-            split_cmd = ['/usr/bin/split' ,'-b'+str(chunk_size) , src_file , split_file_basename]
-    subprocess.call(split_cmd)
+    # Fill the queue of files to transfer
+    q = Queue()
+    chunk_num = 1
+    total_chunks = len(chunk_infos)
+    for (chunk_filename, chunk_md5) in chunk_infos:
+        q.put((chunk_filename, chunk_num, total_chunks, retries))
+        chunk_num = chunk_num + 1
 
     # Kick off threads
-    file_list = glob.glob(split_file_basename+'*')
-    q = Queue()
-    for f in file_list:
-        q.put(f)
-    print "starting threads"
+    print "starting transfers"
     for i in range(num_threads):
-         t = WorkerThread(q , dst_file, remote_server)
-         t.daemon = True
-         t.start()
+        t = WorkerThread(q, dst_file, remote_server, ssh_crypto)
+        t.daemon = True
+        t.start()
     q.join()
 
-    print "Re-assembling file at remote end"
-    subprocess.call(['ssh' , remote_server , 'cat', split_file_basename+'*>'+src_file])
-    print "Checking file"
+    #join the chunks back together and check the md5
+    print "re-assembling file at remote end"
+    chunk_count = 0
+    for (chunk_filename, chunk_md5) in chunk_infos:
+        spin('processing ' + chunk_filename)
+        if chunk_count:
+            cmd = chunk_filename + '>> ' + src_file
+        else:
+            #truncate if the first chunk
+            cmd = chunk_filename + '> ' + src_file
+        subprocess.call(['ssh', remote_server, 'cat', cmd])
+        chunk_count += 1
+    print
+    print 're-assembled'
+    print "checking remote file checksum"
     try:
-        subprocess.check_call(['ssh' , remote_server , 'md5sum', '-c' , src_file+'.md5'])
+        # use openssl to be cross platform (OSX,Linux)
+        checksum = subprocess.check_output(['ssh', remote_server, 'openssl',
+                                            'md5', src_file])
+        # MD5(2GB.mov)= d8ce4123aaacaec671a854f6ec74d8c0
+        if checksum.find(src_file_md5) != -1:
+            print 'PASSED checksums match'
+        else:
+            print 'ERROR: MD5s do not match local(' + src_file_md5 + \
+                  ') != (' + checksum.strip() + ')'
+            print '       File uploaded with errors - MD5 did not match.'
+            print '       local and remote chunks not cleared up'
+            exit(1)
     except CalledProcessError as e:
         print(e.returncode)
-        print "ERROR: File uploaded with errors - MD5 did not match."
+        print 'ERROR: File uploaded with errors - MD5 did not match.'
+        print '       local and remote chunks not cleared up'
         exit(1)
 
-    print "Cleaning up"
-    for f in file_list:
-        subprocess.call(['rm', f])
-    subprocess.call(['ssh' , remote_server , 'rm', split_file_basename+'*'])
-    print "Success"
+    # clean up
+    print "cleaning up"
+    print "removing file chunks"
+    for (chunk_filename, chunk_md5) in chunk_infos:
+        spin("removing file chunk " + chunk_filename)
+        os.remove(chunk_filename)
+        try:
+            subprocess.call(['ssh', remote_server, 'rm', chunk_filename])
+        except CalledProcessError as e:
+            print(e.returncode)
+            print 'ERROR: failed to remove remote chunk ' + chunk_filename
+    print ''
+    print "transfer complete"
+    exit(0)
 
 main()

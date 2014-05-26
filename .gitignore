@@ -37,3 +37,7 @@ nosetests.xml
 .pydevproject
 .idea
 *.swp
+
+*.mov
+split_parts_*
+chunks_*
