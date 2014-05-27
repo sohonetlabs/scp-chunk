@@ -74,3 +74,6 @@ It is expected that the remote shell will provide access to the following comman
     removing file chunks
     removing file chunk chunk_.00004 \
     transfer complete
+
+## Thankyou
+[Bytes-to-human / human-to-bytes converter](http://code.activestate.com/recipes/578019-bytes-to-human-human-to-bytes-converter/)

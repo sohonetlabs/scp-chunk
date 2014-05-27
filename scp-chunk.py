@@ -1,4 +1,4 @@
-__author__ = 'Pat & Ben'
+__author__ = 'Patrick Sumby and Ben Roeder'
 #This version
 #TODO - check if destination exists (overwrite logic - how should this behave
 #       scp, just overwrites...)
@@ -15,6 +15,7 @@ import sys
 import argparse
 import subprocess
 import hashlib
+import time
 from subprocess import CalledProcessError
 from threading import Thread
 from Queue import Queue
@@ -269,7 +270,17 @@ def get_file_md5(filename, buffer_size=1024 * 1024 * 2):
     return str(digest.hexdigest()).lower()
 
 
+def human_sizes(size):
+    try:
+        chunk_size = human2bytes(size)
+    except ValueError as e:
+        msg = "Invalid size "+str(size)+" try 1G" 
+        raise argparse.ArgumentTypeError(msg)
+    return size
+
+
 def main():
+    start_time = time.time()
     #Read in arguments
     parser = argparse.ArgumentParser(description='Chunk a file and then kick'
                                                  ' off multiple SCP threads.'
@@ -282,7 +293,8 @@ def main():
     parser.add_argument('-s', '--size',
                         help='size of chunks to transfer.',
                         default='500M',
-                        required=False)
+                        required=False,
+                        type=human_sizes)
     parser.add_argument('-r', '--retries',
                         help='number of times to retry transfer.',
                         default=default_retries,
@@ -381,7 +393,7 @@ def main():
     #join the chunks back together and check the md5
     print "re-assembling file at remote end"
     chunk_count = 0
-
+    transfer_start_time = time.time()
     for (chunk_filename, chunk_md5) in chunk_infos:
         (path, remote_chunk_filename) = os.path.split(chunk_filename)
 
@@ -397,6 +409,7 @@ def main():
         subprocess.call(['ssh', remote_server, 'cat', cmd])
         chunk_count += 1
 
+    transfer_end_time = time.time()
     print
     print 're-assembled'
     print "checking remote file checksum"
@@ -432,6 +445,9 @@ def main():
             print 'ERROR: failed to remove remote chunk ' + remote - chunk
     print ''
     print "transfer complete"
+    end_time = time.time()
+    print "total time    :" + str(end_time - start_time)
+    print "transfer time :" + str(transfer_end_time - transfer_start_time)
     exit(0)
 
 main()
