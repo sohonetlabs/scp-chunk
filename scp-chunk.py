@@ -158,11 +158,12 @@ def split_file_and_md5(file_name, prefix, max_size, padding_width=5,
 
     chunks = []
     file_md5 = hashlib.md5()
-    (path,file_name_part) = os.path.split(file_name)
+    (path, file_name_part) = os.path.split(file_name)
     with open(file_name, 'r+b') as src:
         suffix = 0
         while True:
-            chunk_name = os.path.join(path, prefix + '.%0*d' % (padding_width, suffix))
+            chunk_name = os.path.join(path, prefix + '.%0*d' % \
+                                      (padding_width, suffix))
             with open(chunk_name, 'w+b') as tgt:
                 chunk_md5 = hashlib.md5()
                 written = 0
@@ -208,7 +209,7 @@ class WorkerThread(Thread):
                           ' remaining ' + \
                           str(self.file_queue.qsize()) + \
                           ' retries ' + str(retries)
-                    res = self.upload_chunk(src_file,dest_file)
+                    res = self.upload_chunk(src_file, dest_file)
                     if res:
                         print "Finished chunk: " + src_file + ' ' + \
                               str(chunk_num) + ':' + str(total_chunks) + \
@@ -220,7 +221,11 @@ class WorkerThread(Thread):
                             print "Re-queuing failed chunk: " + src_file + \
                                   ' ' + str(chunk_num) + ' retries left ' + \
                                   str(retries)
-                            self.file_queue.put((src_file, dest_file, chunk_num, total_chunks, retries))
+                            self.file_queue.put((src_file,
+                                                 dest_file,
+                                                 chunk_num,
+                                                 total_chunks,
+                                                 retries))
                         else:
                             print "ERROR: FAILED to upload " + src_file + \
                                   ' ' + str(chunk_num)
@@ -231,13 +236,17 @@ class WorkerThread(Thread):
                     if retries > 0:
                         print "Re-queuing failed chunk: " + src_file + ' ' + \
                               str(chunk_num) + ' retries left ' + str(retries)
-                        self.file_queue.put((src_file, dest_file, chunk_num, total_chunks, retries))
+                        self.file_queue.put((src_file,
+                                             dest_file,
+                                             chunk_num,
+                                             total_chunks,
+                                             retries))
                     else:
                         print "FAILED to upload " + src_file + ' ' + \
                               str(chunk_num)
                     self.file_queue.task_done()
 
-    def upload_chunk(self, src_file,dest_file):
+    def upload_chunk(self, src_file, dest_file):
         try:
             subprocess.check_call(['scp', '-c' + self.cypher, '-q',
                                    '-oBatchMode=yes', src_file,
@@ -307,11 +316,11 @@ def main():
     remote_server = args.srv
     retries = args.retries
 
-    (dest_path,dest_filename)= os.path.split(dst_file)
-    (src_path,src_filename)= os.path.split(src_file)
-    remote_dest_file = os.path.join(dest_path,src_filename)
+    (dest_path, dest_filename) = os.path.split(dst_file)
+    (src_path, src_filename) = os.path.split(src_file)
+    remote_dest_file = os.path.join(dest_path, src_filename)
     remote_chunk_files = []
-    
+
     # Check args for errors + instantiate variables.
     if not os.path.exists(src_file):
         print 'Error: Source file does not exist', src_file
@@ -330,8 +339,9 @@ def main():
     src_file_md5 = src_file_info[1]
     print "uploading MD5 (%s) checksum to remote site" % src_file_md5
     try:
-        subprocess.call(['ssh', remote_server, 'echo', src_file_md5 +
-                         '\ \ ' + src_filename + '>' + remote_dest_file + '.md5'])
+        subprocess.call(['ssh', remote_server, 'echo', src_file_md5 + \
+                         '\ \ ' + src_filename + '>' + \
+                         remote_dest_file + '.md5'])
     except CalledProcessError as e:
         print(e.returncode)
         print "ERROR: Couldn't connect to remote server."
@@ -343,15 +353,15 @@ def main():
     total_chunks = len(chunk_infos)
     for (src_chunk_filename, chunk_md5) in chunk_infos:
         # create destination path
-        (path,src_filename) = os.path.split(src_chunk_filename)
-        dest_chunk_filename = os.path.join(dest_path,src_filename)
+        (path, src_filename) = os.path.split(src_chunk_filename)
+        dest_chunk_filename = os.path.join(dest_path, src_filename)
         remote_chunk_files.append((src_chunk_filename,
                                    dest_chunk_filename,
                                    chunk_md5))
         q.put((src_chunk_filename,
                dest_chunk_filename,
-               chunk_num, 
-               total_chunks, 
+               chunk_num,
+               total_chunks,
                retries))
         chunk_num = chunk_num + 1
 
@@ -365,22 +375,22 @@ def main():
     #join the chunks back together and check the md5
     print "re-assembling file at remote end"
     chunk_count = 0
-    
+
     for (chunk_filename, chunk_md5) in chunk_infos:
-        (path,remote_chunk_filename) = os.path.split(chunk_filename)
-        
-        remote_chunk_file = os.path.join(dest_path,remote_chunk_filename)
-        
+        (path, remote_chunk_filename) = os.path.split(chunk_filename)
+
+        remote_chunk_file = os.path.join(dest_path, remote_chunk_filename)
+
         spin('processing ' + remote_chunk_filename)
         if chunk_count:
             cmd = remote_chunk_file + '>> ' + remote_dest_file
         else:
             #truncate if the first chunk
             cmd = remote_chunk_file + '> ' + remote_dest_file
-        
+
         subprocess.call(['ssh', remote_server, 'cat', cmd])
         chunk_count += 1
-        
+
     print
     print 're-assembled'
     print "checking remote file checksum"
@@ -413,7 +423,7 @@ def main():
             subprocess.call(['ssh', remote_server, 'rm', remote_chunk])
         except CalledProcessError as e:
             print(e.returncode)
-            print 'ERROR: failed to remove remote chunk ' + remote-chunk
+            print 'ERROR: failed to remove remote chunk ' + remote - chunk
     print ''
     print "transfer complete"
     exit(0)
