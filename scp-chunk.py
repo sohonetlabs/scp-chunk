@@ -339,9 +339,14 @@ def main():
     src_file_md5 = src_file_info[1]
     print "uploading MD5 (%s) checksum to remote site" % src_file_md5
     try:
-        subprocess.call(['ssh', remote_server, 'echo', src_file_md5 + \
-                         '\ \ ' + src_filename + '>' + \
-                         remote_dest_file + '.md5'])
+        checksum_filename = src_file+'.md5'
+        dest_checksum_filename = os.path.join(dest_path,src_filename+'.md5')
+        with open(checksum_filename,'w+') as checksum_file:
+            checksum_file.write(src_file_md5 +' '+src_filename)
+        subprocess.check_call(['scp', '-c' + ssh_crypto, '-q',
+                                '-oBatchMode=yes', src_file,
+                                remote_server + ':' + \
+                                dest_checksum_filename])
     except CalledProcessError as e:
         print(e.returncode)
         print "ERROR: Couldn't connect to remote server."

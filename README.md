@@ -14,15 +14,16 @@ Uses scp to transfer the files to the remote system in parrellel, and expects th
 [see article here on how to set this up]( http://hocuspokus.net/2008/01/ssh-shared-key-setup-ssh-logins-without-passwords/)
 
 ###Goal
-Use the system python without having to install any other packages, just using the built in commands listed below. 
+Use the system python, without having to install any other python packages, just using the programs listed below. 
 
-It is expected that the remote shell will provide access to the following commands
+It is expected that the remote shell will provide access to the following commands :-
+####remote system
+* [openssl](http://unixhelp.ed.ac.uk/CGI/man-cgi?openssl) usage to calculate checksum: **openssl md5 \<filename>**
+* [cat](http://unixhelp.ed.ac.uk/CGI/man-cgi?cat) usage to reassemble chunks: **cat \<filename> >> \<filename>**
+* [rm](http://unixhelp.ed.ac.uk/CGI/man-cgi?rm) usage to remove chunks: **rm \<filename>**
 
-* [echo](http://unixhelp.ed.ac.uk/CGI/man-cgi?echo)
-* [openssl](http://unixhelp.ed.ac.uk/CGI/man-cgi?openssl)
-* [cat](http://unixhelp.ed.ac.uk/CGI/man-cgi?cat)
-* [rm](http://unixhelp.ed.ac.uk/CGI/man-cgi?rm)
-
+#####local system
+* [scp](http://unixhelp.ed.ac.uk/CGI/man-cgi?scp) to copy files to remote system.
 
 ##Usage
 
