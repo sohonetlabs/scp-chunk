@@ -343,8 +343,9 @@ def main():
         dest_checksum_filename = os.path.join(dest_path,src_filename+'.md5')
         with open(checksum_filename,'w+') as checksum_file:
             checksum_file.write(src_file_md5 +' '+src_filename)
+        print 'copying '+src_file+' to '+dest_checksum_filename
         subprocess.check_call(['scp', '-c' + ssh_crypto, '-q',
-                                '-oBatchMode=yes', src_file,
+                                '-oBatchMode=yes', checksum_filename,
                                 remote_server + ':' + \
                                 dest_checksum_filename])
     except CalledProcessError as e:
