@@ -85,7 +85,7 @@ It is expected that the remote shell will provide access to the following comman
     64 bytes from xxx.xxx.xxx.xxx: icmp_seq=3 ttl=58 time=150.927 ms
 
 
-    python scp-chunk.py /Stuff/23GBlargefile.mov  ben@ves-us.sohonet.com /Store/ben_test/ --threads 10 --size 1G
+    python scp-chunk.py /Stuff/23GBlargefile.mov  ben@transfer.example.com /Store/ben_test/ --threads 10 --size 1G
     spliting file
     uploading MD5 (5e631de28dd45d1b05952c885a882be1) checksum to remote site
     copying /Stuff/23GBlargefile.mov to /Store/ben_test/23GBlargefile.mov.md5
