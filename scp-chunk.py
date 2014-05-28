@@ -1,14 +1,4 @@
 __author__ = 'Patrick Sumby and Ben Roeder'
-#This version
-#TODO - check if destination exists (overwrite logic - how should this behave
-#       scp, just overwrites...)
-
-#Next iteration
-#TODO - implement password mode, rather than just shared ssh keys
-#TODO - individual md5 check in event of failure / recovery option.
-#TODO - classify main block of code.
-#TODO - What about remote to local copy....?
-#TODO - Implement cipher setting checking
 
 import os
 import sys
@@ -352,7 +342,6 @@ def main():
                         default=default_num_threads,
                         required=False,
                         type=int)
-    #parser.add_argument('-p','--password', help='password',required=False)
     parser.add_argument('src', help='source file')
     parser.add_argument('srv',
                         help='remote server and user if required'
