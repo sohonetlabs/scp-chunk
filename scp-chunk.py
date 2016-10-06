@@ -167,7 +167,7 @@ def human2bytes(s):
             sset = SYMBOLS['customary']
             letter = letter.upper()
         else:
-            raise ValueError("can't interpret %r" % init)
+            raise ValueError("can't interpret {0!r}".format(init))
     prefix = {sset[0]: 1}
     for i, s in enumerate(sset[1:]):
         prefix[s] = 1 << (i + 1) * 10
@@ -390,7 +390,7 @@ def main():
                                                       chunk_size)
     src_file_md5 = src_file_info[1]
     local_chunk_end_time = time.time()
-    print "uploading MD5 (%s) checksum to remote site" % src_file_md5
+    print "uploading MD5 ({0!s}) checksum to remote site".format(src_file_md5)
     try:
         checksum_filename = src_file+'.md5'
         dest_checksum_filename = os.path.join(dest_path,src_filename+'.md5')
