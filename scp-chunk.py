@@ -488,7 +488,7 @@ def main():
             subprocess.call(['ssh', remote_server, 'rm', remote_chunk])
         except CalledProcessError as e:
             print(e.returncode)
-            print 'ERROR: failed to remove remote chunk ' + remote - chunk
+            print 'ERROR: failed to remove remote chunk ' + remote_chunk
     print ''
     print "transfer complete"
     end_time = time.time()
