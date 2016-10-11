@@ -191,7 +191,7 @@ def spin(text):
 
 
 def split_file_and_md5(file_name, prefix, max_size, padding_width=5,
-                       buffer=1024 * 1024 * 5):
+                       buff=1024 * 1024 * 5):
 
     chunks = []
     file_md5 = hashlib.md5()
@@ -205,12 +205,12 @@ def split_file_and_md5(file_name, prefix, max_size, padding_width=5,
                 chunk_md5 = hashlib.md5()
                 written = 0
                 while written <= max_size:
-                    data = src.read(buffer)
+                    data = src.read(buff)
                     file_md5.update(data)
                     chunk_md5.update(data)
                     if data:
                         tgt.write(data)
-                        written += buffer
+                        written += buff
                         spin(chunk_name)
                     else:
                         chunks.append((chunk_name, chunk_md5.hexdigest()))
