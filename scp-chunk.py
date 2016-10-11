@@ -159,7 +159,7 @@ def human2bytes(s):
         s = s[1:]
     num = float(num)
     letter = s.strip()
-    for name, sset in SYMBOLS.items():
+    for _, sset in SYMBOLS.items():
         if letter in sset:
             break
     else:
@@ -268,7 +268,7 @@ class WorkerThread(Thread):
                             print "ERROR: FAILED to upload " + src_file + \
                                   ' ' + str(chunk_num)
                         self.file_queue.task_done()
-                except Exception as inst:
+                except Exception as _:
                     print 'ERROR: in uploading in tread'
                     retries = retries - 1
                     if retries > 0:
@@ -289,7 +289,7 @@ class WorkerThread(Thread):
             subprocess.check_call(['scp', '-c' + self.cypher, '-q',
                                    '-oBatchMode=yes', src_file,
                                    self.remote_server + ':' + dest_file])
-        except CalledProcessError as e:
+        except CalledProcessError as _:
             return False
         return True
 
@@ -310,7 +310,7 @@ def get_file_md5(filename, buffer_size=1024 * 1024 * 2):
 def human_sizes(size):
     try:
         chunk_size = human2bytes(size)
-    except ValueError as e:
+    except ValueError as _:
         msg = "Invalid size " + str(size) + " try 1G"
         raise argparse.ArgumentTypeError(msg)
     return size
@@ -364,8 +364,8 @@ def main():
     remote_server = args.srv
     retries = args.retries
 
-    (dest_path, dest_filename) = os.path.split(dst_file)
-    (src_path, src_filename) = os.path.split(src_file)
+    (dest_path, _) = os.path.split(dst_file)
+    (_ , src_filename) = os.path.split(src_file)
     remote_dest_file = os.path.join(dest_path, src_filename)
     remote_chunk_files = []
 
@@ -380,7 +380,6 @@ def main():
     src_file_size = os.stat(src_file).st_size
     # Split file and calc the file md5
     local_chunk_start_time = time.time()
-    split_cmd = ''
     print "spliting file"
     spinner = spinning_cursor()
     sys.stdout.write(spinner.next())
@@ -413,7 +412,7 @@ def main():
     total_chunks = len(chunk_infos)
     for (src_chunk_filename, chunk_md5) in chunk_infos:
         # create destination path
-        (path, src_filename) = os.path.split(src_chunk_filename)
+        (_, src_filename) = os.path.split(src_chunk_filename)
         dest_chunk_filename = os.path.join(dest_path, src_filename)
         remote_chunk_files.append((src_chunk_filename,
                                    dest_chunk_filename,
