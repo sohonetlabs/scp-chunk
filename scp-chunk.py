@@ -18,14 +18,15 @@ split_file_basename = 'chunk_'
 INTERVALS = [1, 60, 3600, 86400, 604800, 2419200, 29030400]
 NAMES = [('second', 'seconds'),
          ('minute', 'minutes'),
-         ('hour',   'hours'),
-         ('day',    'days'),
-         ('week',   'weeks'),
-         ('month',  'months'),
-         ('year',   'years')]
+         ('hour', 'hours'),
+         ('day', 'days'),
+         ('week', 'weeks'),
+         ('month', 'months'),
+         ('year', 'years')]
+
 
 def humanize_time(amount, units):
-   '''
+    '''
       Divide `amount` in time periods.
       Useful for making time intervals more human readable.
 
@@ -40,25 +41,25 @@ def humanize_time(amount, units):
       >>> humanize_time(500, "days")
       [(1, 'year'), (5, 'months'), (3, 'weeks'), (3, 'days')]
    '''
-   result = []
+    result = []
 
-   unit = map(lambda a: a[1], NAMES).index(units)
-   # Convert to seconds
-   amount = amount * INTERVALS[unit]
+    unit = map(lambda a: a[1], NAMES).index(units)
+    # Convert to seconds
+    amount = amount * INTERVALS[unit]
 
-   for i in range(len(NAMES)-1, -1, -1):
-      a = amount // INTERVALS[i]
-      if a > 0: 
-         result.append( (a, NAMES[i][1 % a]) )
-         amount -= a * INTERVALS[i]
+    for i in range(len(NAMES) - 1, -1, -1):
+        a = amount // INTERVALS[i]
+        if a > 0:
+            result.append((a, NAMES[i][1 % a]))
+            amount -= a * INTERVALS[i]
 
-   return result
+    return result
 
 
 def humanize_time_to_string(time):
     time_str = ''
-    for (t,units) in time:
-        time_str+=str(t)+' '+str(units)+' '
+    for (t, units) in time:
+        time_str += str(t) + ' ' + str(units) + ' '
     return time_str
 
 # see: http://goo.gl/kTQMs
@@ -310,7 +311,7 @@ def human_sizes(size):
     try:
         chunk_size = human2bytes(size)
     except ValueError as e:
-        msg = "Invalid size "+str(size)+" try 1G" 
+        msg = "Invalid size " + str(size) + " try 1G"
         raise argparse.ArgumentTypeError(msg)
     return size
 
@@ -375,10 +376,10 @@ def main():
     if not os.path.isfile(src_file):
         print 'Error: Source is not a file', src_file
         exit(1)
-        
+
     src_file_size = os.stat(src_file).st_size
     # Split file and calc the file md5
-    local_chunk_start_time =  time.time()
+    local_chunk_start_time = time.time()
     split_cmd = ''
     print "spliting file"
     spinner = spinning_cursor()
@@ -392,11 +393,11 @@ def main():
     local_chunk_end_time = time.time()
     print "uploading MD5 ({0!s}) checksum to remote site".format(src_file_md5)
     try:
-        checksum_filename = src_file+'.md5'
-        dest_checksum_filename = os.path.join(dest_path,src_filename+'.md5')
-        with open(checksum_filename,'w+') as checksum_file:
-            checksum_file.write(src_file_md5 +' '+src_filename)
-        print 'copying '+src_file+' to '+dest_checksum_filename
+        checksum_filename = src_file + '.md5'
+        dest_checksum_filename = os.path.join(dest_path, src_filename + '.md5')
+        with open(checksum_filename, 'w+') as checksum_file:
+            checksum_file.write(src_file_md5 + ' ' + src_filename)
+        print 'copying ' + src_file + ' to ' + dest_checksum_filename
         subprocess.check_call(['scp', '-c' + ssh_crypto, '-q',
                                 '-oBatchMode=yes', checksum_filename,
                                 remote_server + ':' + \
@@ -433,7 +434,7 @@ def main():
         t.start()
     q.join()
     transfer_end_time = time.time()
-    
+
     #join the chunks back together and check the md5
     print "re-assembling file at remote end"
     remote_chunk_start_time = time.time()
@@ -457,7 +458,7 @@ def main():
     remote_chunk_end_time = time.time()
 
     print "checking remote file checksum"
-    remote_checksum_start_time= time.time()
+    remote_checksum_start_time = time.time()
     try:
         # use openssl to be cross platform (OSX,Linux)
         checksum = subprocess.check_output(['ssh', remote_server, 'openssl',
@@ -476,8 +477,8 @@ def main():
         print 'ERROR: File uploaded with errors - MD5 did not match.'
         print '       local and remote chunks not cleared up'
         exit(1)
-    
-    remote_checksum_end_time= time.time()
+
+    remote_checksum_end_time = time.time()
     # clean up
     print "cleaning up"
     print "removing file chunks"
@@ -493,43 +494,43 @@ def main():
     print "transfer complete"
     end_time = time.time()
     print "-" * 80
-    print "file size              :" + bytes2human(src_file_size)+"B"
-    print "transfer rate          :" + bytes2human(src_file_size / 
-                                                   int(transfer_end_time -\
-                                                   transfer_start_time))+"B/s"
-    print "                       :" + bytes2human((src_file_size * 8) / 
-                                                  int(transfer_end_time -\
-                                                  transfer_start_time))+"b/s"
-    print "transfer time          :" + str(humanize_time_to_string(\
-                                           humanize_time(\
+    print "file size              :" + bytes2human(src_file_size) + "B"
+    print "transfer rate          :" + bytes2human(src_file_size /
+                                                   int(transfer_end_time - \
+                                                   transfer_start_time)) + "B/s"
+    print "                       :" + bytes2human((src_file_size * 8) /
+                                                  int(transfer_end_time - \
+                                                  transfer_start_time)) + "b/s"
+    print "transfer time          :" + str(humanize_time_to_string( \
+                                           humanize_time( \
                                            int(transfer_end_time - \
                                            transfer_start_time),
                                            "seconds")))
-    print "local chunking time    :" + str(humanize_time_to_string(\
-                                           humanize_time(\
-                                           int(local_chunk_end_time -\
-                                           local_chunk_start_time), 
+    print "local chunking time    :" + str(humanize_time_to_string( \
+                                           humanize_time( \
+                                           int(local_chunk_end_time - \
+                                           local_chunk_start_time),
                                            "seconds")))
-    print "remote reassembly time :" + str(humanize_time_to_string(\
-                                           humanize_time(\
+    print "remote reassembly time :" + str(humanize_time_to_string( \
+                                           humanize_time( \
                                            int(remote_chunk_end_time - \
                                            remote_chunk_start_time),
                                            "seconds")))
     print "remote checksum time   :" + str(humanize_time_to_string(
-                                           humanize_time(\
-                                           int(remote_checksum_end_time -\
-                                           remote_checksum_start_time),\
+                                           humanize_time( \
+                                           int(remote_checksum_end_time - \
+                                           remote_checksum_start_time), \
                                            "seconds")))
     print "total transfer rate    :" + bytes2human(src_file_size / \
                                                    int(end_time - \
-                                                       start_time))+"B/s"
+                                                       start_time)) + "B/s"
     print "                       :" + bytes2human((src_file_size * 8) / \
                                                    int(end_time - \
-                                                       start_time))+"b/s"
-    print "total time             :" + str(humanize_time_to_string(\
-                                           humanize_time(int(end_time -\
+                                                       start_time)) + "b/s"
+    print "total time             :" + str(humanize_time_to_string( \
+                                           humanize_time(int(end_time - \
                                            start_time), "seconds")))
-    
+
     exit(0)
 
 main()
