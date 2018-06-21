@@ -10,9 +10,9 @@ from subprocess import CalledProcessError
 from threading import Thread
 from Queue import Queue
 
-default_num_threads = 3
-default_retries = 0
-default_cypher = 'arcfour'
+default_num_threads = 4
+default_retries = 2
+default_cypher = 'aes256-ctr'
 split_file_basename = 'chunk_'
 
 INTERVALS = [1, 60, 3600, 86400, 604800, 2419200, 29030400]
@@ -329,7 +329,7 @@ def main():
                         required=False)
     parser.add_argument('-s', '--size',
                         help='size of chunks to transfer.',
-                        default='500M',
+                        default='20M',
                         required=False,
                         type=human_sizes)
     parser.add_argument('-r', '--retries',
@@ -397,9 +397,9 @@ def main():
         with open(checksum_filename, 'w+') as checksum_file:
             checksum_file.write(src_file_md5 + ' ' + src_filename)
         print 'copying ' + src_file + ' to ' + dest_checksum_filename
-        subprocess.check_call(['scp', '-c' + ssh_crypto, '-q',
+        subprocess.check_call(['scp', '-o Cipher=' + ssh_crypto, '-q',
                                 '-oBatchMode=yes', checksum_filename,
-                                remote_server + ':' + \
+                                remote_server + ':' +
                                 dest_checksum_filename])
     except CalledProcessError as e:
         print(e.returncode)
@@ -438,20 +438,25 @@ def main():
     print "re-assembling file at remote end"
     remote_chunk_start_time = time.time()
     chunk_count = 0
+
+    cat_cmd = ""
     for (chunk_filename, chunk_md5) in chunk_infos:
         (path, remote_chunk_filename) = os.path.split(chunk_filename)
-
+        cat_cmd = cat_cmd + ' ' + remote_chunk_filename
         remote_chunk_file = os.path.join(dest_path, remote_chunk_filename)
-
-        spin('processing ' + remote_chunk_filename)
-        if chunk_count:
-            cmd = remote_chunk_file + '>> ' + remote_dest_file
-        else:
-            #truncate if the first chunk
-            cmd = remote_chunk_file + '> ' + remote_dest_file
-
-        subprocess.call(['ssh', remote_server, 'cat', cmd])
         chunk_count += 1
+
+    # spin('processing ' + remote_chunk_filename)
+        # if chunk_count:
+        #     cmd = remote_chunk_file + '>> ' + remote_dest_file
+        # else:
+        #     #truncate if the first chunk
+        #     cmd = remote_chunk_file + '> ' + remote_dest_file
+    cat_cmd = cat_cmd + ' > ' + remote_dest_file
+    print 'ssh', remote_server, 'cat', cat_cmd
+    subprocess.call(['ssh', remote_server, 'cat', cat_cmd])
+
+    print "cat_cmd " + cat_cmd
     print
     print 're-assembled'
     remote_chunk_end_time = time.time()
@@ -484,11 +489,16 @@ def main():
     for (local_chunk, remote_chunk, chunk_md5) in remote_chunk_files:
         spin("removing file chunk " + local_chunk)
         os.remove(local_chunk)
-        try:
-            subprocess.call(['ssh', remote_server, 'rm', remote_chunk])
-        except CalledProcessError as e:
-            print(e.returncode)
-            print 'ERROR: failed to remove remote chunk ' + remote_chunk
+    try:
+        print "removing all remote chunks..."
+        remote_chunk_wildcard = remote_chunk[:-4] + '*'
+        remote_chunk_md5 = remote_chunk[:-5] + 'md5'
+        subprocess.call(['ssh', remote_server, 'rm', remote_chunk_wildcard])
+        subprocess.call(['ssh', remote_server, 'rm', remote_chunk_md5])
+
+    except CalledProcessError as e:
+        print(e.returncode)
+        print 'ERROR: failed to remove remote chunk ' + remote_chunk
     print ''
     print "transfer complete"
     end_time = time.time()
