@@ -1,12 +1,15 @@
 scp-chunk
 ===================
-##Why ?
+
+## Why ?
+
 For transferring files over long latency links. Depending on the TCP/IP stack and the version of ssh installed latency can limit the speed that a single transfer will achieve, on a per connection basis. To work around this scp-chunk transfers multiple chunks at the same time.
 
 Use the system python, without having to install any other python packages!!!! just put this on the machine and go.
 
 
-##How it works
+## How it works
+
 Split a large file into chunks and then transfer via multiple scp connections.
 Then join the chunks back together, check the checksum.
 then clean up all the chunks, at the local and remote ends.
@@ -16,19 +19,23 @@ It will use at peak twice the disk space of the size of the file to be transferr
 Uses scp to transfer the files to the remote system in parrellel, and expects the user to be pre-keyed to the remote systems.
 [see article here on how to set this up]( http://hocuspokus.net/2008/01/ssh-shared-key-setup-ssh-logins-without-passwords/)
 
-###Goal
+### Goal
+
 Use the system python, without having to install any other python packages, just using the programs listed below. 
 
 It is expected that the remote shell will provide access to the following commands :-
-####remote system
+
+#### remote system
+
 * [openssl](http://unixhelp.ed.ac.uk/CGI/man-cgi?openssl) usage to calculate checksum: **openssl md5 \<filename>**
 * [cat](http://unixhelp.ed.ac.uk/CGI/man-cgi?cat) usage to reassemble chunks: **cat \<filename> >> \<filename>**
 * [rm](http://unixhelp.ed.ac.uk/CGI/man-cgi?rm) usage to remove chunks: **rm \<filename>**
 
-#####local system
+##### local system
+
 * [scp](http://unixhelp.ed.ac.uk/CGI/man-cgi?scp) to copy files to remote system.
 
-##Usage
+## Usage
 
 
     usage: scp-chunk.py [-h] [-c CYPHER] [-s SIZE] [-r RETRIES] [-t THREADS]  
@@ -51,7 +58,7 @@ It is expected that the remote shell will provide access to the following comman
       -t THREADS, --threads THREADS
                             number of threads (default 3)
 
-##Example output
+## Example output
 
     python scp-chunk.py  2GB.mov ben@10.110.10.121 . --threads 10
 
@@ -141,6 +148,7 @@ It is expected that the remote shell will provide access to the following comman
 Would be faster is if the disks where not rubbish at the source end. SSD at each end would make it faster to chunk the file.
 
 ## Thank you
+
 [Bytes-to-human / human-to-bytes converter](http://code.activestate.com/recipes/578019-bytes-to-human-human-to-bytes-converter/)
 
 
