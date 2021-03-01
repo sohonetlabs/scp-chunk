@@ -15,7 +15,6 @@ winPath = re.compile('^(\w)\:[\\/](.*)$', re.IGNORECASE)
 
 default_num_threads = 3
 default_retries = 0
-default_cypher = 'aes128-cbc'
 split_file_basename = 'chunk_'
 
 INTERVALS = [1, 60, 3600, 86400, 604800, 2419200, 29030400]
@@ -227,14 +226,12 @@ def split_file_and_md5(file_name, prefix, max_size, padding_width=5,
 class WorkerThread(Thread):
 
     def __init__(self, file_queue, dst_file,
-                 remote_server,
-                 cypher):
+                 remote_server):
 
         Thread.__init__(self)
         self.file_queue = file_queue
         self.dst_file = dst_file
         self.remote_server = remote_server
-        self.cypher = cypher
 
     def run(self):
         while True:
@@ -289,9 +286,6 @@ class WorkerThread(Thread):
 
     def upload_chunk(self, src_file, dest_file):
         try:
-            # subprocess.check_call(['scp', '-c' + self.cypher, '-q',
-            #                        '-oBatchMode=yes', '-oConnectTimeout=30', src_file,
-            #                        self.remote_server + ':' + dest_file])
             if winPath.match(src_file):
                 src_file = winPath.sub(r'/\g<1>/\g<2>', src_file)
             src_file = src_file.replace("\\", "/")
@@ -332,10 +326,6 @@ def main():
                                                  ' off multiple SCP threads.'
                                                  'Speeds up transfers over '
                                                  'high latency links')
-    parser.add_argument('-c', '--cypher',
-                        help='cypher use with from transfer see: ssh',
-                        default=default_cypher,
-                        required=False)
     parser.add_argument('-s', '--size',
                         help='size of chunks to transfer.',
                         default='500M',
@@ -361,7 +351,6 @@ def main():
 
     args = parser.parse_args()
 
-    ssh_crypto = args.cypher
     try:
         chunk_size = human2bytes(args.size)
     except ValueError as e:
@@ -408,10 +397,14 @@ def main():
         with open(checksum_filename, 'w+') as checksum_file:
             checksum_file.write(src_file_md5 + ' ' + src_filename)
         print('copying ' + src_file + ' to ' + dest_checksum_filename)
-        subprocess.check_call(['scp', '-c' + ssh_crypto, '-q',
-                                '-oBatchMode=yes', checksum_filename,
-                                remote_server + ':' + \
-                                dest_checksum_filename])
+        #subprocess.check_call(['scp', '-q',
+        #                        '-oBatchMode=yes', checksum_filename,
+        #                        remote_server + ':' + \
+        #                        dest_checksum_filename])
+        subprocess.check_call(['rsync', '-Ptz', '--inplace', '--rsh=ssh',
+                               '--timeout=30', checksum_filename,
+                               remote_server + ':' + dest_checksum_filename])
+        
     except CalledProcessError as e:
         print(e.returncode)
         print("ERROR: Couldn't connect to remote server.")
@@ -439,7 +432,7 @@ def main():
     transfer_start_time = time.time()
     print("starting transfers")
     for i in range(num_threads):
-        t = WorkerThread(q, dst_file, remote_server, ssh_crypto)
+        t = WorkerThread(q, dst_file, remote_server)
         t.daemon = True
         t.start()
     q.join()
