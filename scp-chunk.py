@@ -313,7 +313,7 @@ def human_sizes(size):
     except ValueError as _:
         msg = "Invalid size " + str(size) + " try 1G"
         raise argparse.ArgumentTypeError(msg)
-    return size
+    return chunk_size
 
 
 def main():
