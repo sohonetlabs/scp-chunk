@@ -7,6 +7,7 @@ For transferring files over long latency links. Depending on the TCP/IP stack an
 
 Use the system python, without having to install any other python packages!!!! just put this on the machine and go.
 
+Can use rsync instead of scp.
 
 ## How it works
 
@@ -16,7 +17,7 @@ then clean up all the chunks, at the local and remote ends.
 It will use at peak twice the disk space of the size of the file to be transferred at each end.
 
 ##Requirements
-Uses scp to transfer the files to the remote system in parrellel, and expects the user to be pre-keyed to the remote systems.
+Uses rsync or scp to transfer the files to the remote system in parrellel, and expects the user to be pre-keyed to the remote systems.
 [see article here on how to set this up]( http://hocuspokus.net/2008/01/ssh-shared-key-setup-ssh-logins-without-passwords/)
 
 ### Goal
@@ -27,36 +28,38 @@ It is expected that the remote shell will provide access to the following comman
 
 #### remote system
 
-* [openssl](http://unixhelp.ed.ac.uk/CGI/man-cgi?openssl) usage to calculate checksum: **openssl md5 \<filename>**
-* [cat](http://unixhelp.ed.ac.uk/CGI/man-cgi?cat) usage to reassemble chunks: **cat \<filename> >> \<filename>**
-* [rm](http://unixhelp.ed.ac.uk/CGI/man-cgi?rm) usage to remove chunks: **rm \<filename>**
+* [openssl](https://linux.die.net/man/1/openssl) usage to calculate checksum: **openssl md5 \<filename>**
+* [cat](https://linux.die.net/man/1/cat) usage to reassemble chunks: **cat \<filename> >> \<filename>**
+* [rm](https://linux.die.net/man/1/rm) usage to remove chunks: **rm \<filename>**
+* [rsync](inux.die.net/man/1/rsync) usage to transfer chunks, use --use_rsync  
 
 ##### local system
 
-* [scp](http://unixhelp.ed.ac.uk/CGI/man-cgi?scp) to copy files to remote system.
+* [scp](https://linux.die.net/man/1/scp) to copy files to remote system.
 
 ## Usage
 
 
-    usage: scp-chunk.py [-h] [-c CYPHER] [-s SIZE] [-r RETRIES] [-t THREADS]  
-                       src srv dst  
+    usage: scp-chunk.py [-h] [-c CYPHER] [-s SIZE] [-r RETRIES] [-t THREADS] [--use_rsync]
+                        src srv dst
 
-    Chunk a file and then kick off multiple SCP threads.Speeds up transfers over high latency links  
+    Chunk a file and then kick off multiple SCP threads.Speeds up transfers over high latency links
 
     positional arguments:
-      src                   source file  
+      src                   source file
       srv                   remote server and user if required e.g foo@example.com
       dst                   directory (if remote home dir then specify . )
 
     optional arguments:
       -h, --help            show this help message and exit
       -c CYPHER, --cypher CYPHER
-                            cypher use with from transfer see: ssh
+                            cypher to use, from transfer see: ssh
       -s SIZE, --size SIZE  size of chunks to transfer.
       -r RETRIES, --retries RETRIES
                             number of times to retry transfer.
       -t THREADS, --threads THREADS
                             number of threads (default 3)
+      --use_rsync           Use rsync instead of scp, scp is being deprecated
 
 ## Example output
 

@@ -250,7 +250,7 @@ class WorkerThread(Thread):
                           ' remaining ' + \
                           str(self.file_queue.qsize()) + \
                           ' retries ' + str(retries))
-                    res = self.upload_chunk(src_file, dest_file)
+                    res = self.upload_chunk(src_file, dest_file, use_rsync)
                     if res:
                         print("Finished chunk: " + src_file + ' ' + \
                               str(chunk_num) + ':' + str(total_chunks) + \
@@ -287,17 +287,20 @@ class WorkerThread(Thread):
                               str(chunk_num))
                     self.file_queue.task_done()
 
-    def upload_chunk(self, src_file, dest_file):
+    def upload_chunk(self, src_file, dest_file,use_rsync=False):
         try:
-            # subprocess.check_call(['scp', '-c' + self.cypher, '-q',
-            #                        '-oBatchMode=yes', '-oConnectTimeout=30', src_file,
-            #                        self.remote_server + ':' + dest_file])
-            if winPath.match(src_file):
-                src_file = winPath.sub(r'/\g<1>/\g<2>', src_file)
-            src_file = src_file.replace("\\", "/")
-            subprocess.check_call(['rsync', '-Ptz', '--inplace', '--rsh=ssh',
-                                   '--timeout=30', src_file,
-                                   self.remote_server + ':' + dest_file])
+            if use_rsync:
+                if winPath.match(src_file):
+                    src_file = winPath.sub(r'/\g<1>/\g<2>', src_file)
+                    src_file = src_file.replace("\\", "/")
+                    subprocess.check_call(['rsync', '-Ptz', '--inplace', '--rsh=ssh',
+                                          '--timeout=30', src_file,
+                                          self.remote_server + ':' + dest_file])               
+            else:
+                subprocess.check_call(['scp', '-c' + self.cypher, '-q',
+                                      '-oBatchMode=yes', '-oConnectTimeout=30', src_file,
+                                      self.remote_server + ':' + dest_file])
+
         except CalledProcessError as _:
             return False
         return True
@@ -333,7 +336,7 @@ def main():
                                                  'Speeds up transfers over '
                                                  'high latency links')
     parser.add_argument('-c', '--cypher',
-                        help='cypher use with from transfer see: ssh',
+                        help='cypher to use, from transfer see: ssh',
                         default=default_cypher,
                         required=False)
     parser.add_argument('-s', '--size',
@@ -346,6 +349,7 @@ def main():
                         default=default_retries,
                         required=False,
                         type=int)
+    
     parser.add_argument('-t', '--threads',
                         help='number of threads (default ' +
                         str(default_num_threads) + ')',
@@ -358,7 +362,10 @@ def main():
                              ' e.g foo@example.com')
     parser.add_argument('dst',
                         help='directory (if remote home dir then specify . )')
-
+    parser.add_argument("--use_rsync", 
+                        action="store_true", 
+                        help="Use rsync instead of scp, scp is being deprecated")
+    
     args = parser.parse_args()
 
     ssh_crypto = args.cypher
@@ -372,6 +379,7 @@ def main():
     dst_file = args.dst
     remote_server = args.srv
     retries = args.retries
+    use_rsync = args.use_rsync
 
     (dest_path, _) = os.path.split(dst_file)
     if dest_path == "":
@@ -438,7 +446,7 @@ def main():
     # Kick off threads
     transfer_start_time = time.time()
     print("starting transfers")
-    for i in range(num_threads):
+    for _ in range(num_threads):
         t = WorkerThread(q, dst_file, remote_server, ssh_crypto)
         t.daemon = True
         t.start()
