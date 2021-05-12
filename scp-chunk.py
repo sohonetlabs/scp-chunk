@@ -6,13 +6,16 @@ import argparse
 import subprocess
 import hashlib
 import time
+import re
 from subprocess import CalledProcessError
 from threading import Thread
-from Queue import Queue
+from queue import Queue
+
+winPath = re.compile('^(\w)\:[\\/](.*)$', re.IGNORECASE)
 
 default_num_threads = 3
 default_retries = 0
-default_cypher = 'arcfour'
+default_cypher = 'aes128-cbc'
 split_file_basename = 'chunk_'
 
 INTERVALS = [1, 60, 3600, 86400, 604800, 2419200, 29030400]
@@ -43,7 +46,7 @@ def humanize_time(amount, units):
    '''
     result = []
 
-    unit = map(lambda a: a[1], NAMES).index(units)
+    unit = list(map(lambda a: a[1], NAMES)).index(units)
     # Convert to seconds
     amount = amount * INTERVALS[unit]
 
@@ -185,7 +188,7 @@ spinner = spinning_cursor()
 
 def spin(text):
 
-    sys.stdout.write(text + ' ' + spinner.next())
+    sys.stdout.write(text + ' ' + next(spinner))
     sys.stdout.flush()
     back_spc = (len(text) + 2) * '\b'
     sys.stdout.write(back_spc)
@@ -241,53 +244,59 @@ class WorkerThread(Thread):
                 try:
                     (src_file, dest_file, chunk_num, total_chunks, retries) = \
                                     self.file_queue.get(timeout=1)
-                    print "Starting chunk: " + src_file + ' ' + \
+                    print("Starting chunk: " + src_file + ' ' + \
                           str(chunk_num) + ':' + \
                           str(total_chunks) + \
                           ' remaining ' + \
                           str(self.file_queue.qsize()) + \
-                          ' retries ' + str(retries)
+                          ' retries ' + str(retries))
                     res = self.upload_chunk(src_file, dest_file)
                     if res:
-                        print "Finished chunk: " + src_file + ' ' + \
+                        print("Finished chunk: " + src_file + ' ' + \
                               str(chunk_num) + ':' + str(total_chunks) + \
-                              ' remaining ' + str(self.file_queue.qsize())
+                              ' remaining ' + str(self.file_queue.qsize()))
                         self.file_queue.task_done()
                     else:
                         retries = retries - 1
                         if retries > 0:
-                            print "Re-queuing failed chunk: " + src_file + \
+                            print("Re-queuing failed chunk: " + src_file + \
                                   ' ' + str(chunk_num) + ' retries left ' + \
-                                  str(retries)
+                                  str(retries))
                             self.file_queue.put((src_file,
                                                  dest_file,
                                                  chunk_num,
                                                  total_chunks,
                                                  retries))
                         else:
-                            print "ERROR: FAILED to upload " + src_file + \
-                                  ' ' + str(chunk_num)
+                            print("ERROR: FAILED to upload " + src_file + \
+                                  ' ' + str(chunk_num))
                         self.file_queue.task_done()
                 except Exception as _:
-                    print 'ERROR: in uploading in tread'
+                    print('ERROR: in uploading in tread')
                     retries = retries - 1
                     if retries > 0:
-                        print "Re-queuing failed chunk: " + src_file + ' ' + \
-                              str(chunk_num) + ' retries left ' + str(retries)
+                        print("Re-queuing failed chunk: " + src_file + ' ' + \
+                              str(chunk_num) + ' retries left ' + str(retries))
                         self.file_queue.put((src_file,
                                              dest_file,
                                              chunk_num,
                                              total_chunks,
                                              retries))
                     else:
-                        print "FAILED to upload " + src_file + ' ' + \
-                              str(chunk_num)
+                        print("FAILED to upload " + src_file + ' ' + \
+                              str(chunk_num))
                     self.file_queue.task_done()
 
     def upload_chunk(self, src_file, dest_file):
         try:
-            subprocess.check_call(['scp', '-c' + self.cypher, '-q',
-                                   '-oBatchMode=yes', src_file,
+            # subprocess.check_call(['scp', '-c' + self.cypher, '-q',
+            #                        '-oBatchMode=yes', '-oConnectTimeout=30', src_file,
+            #                        self.remote_server + ':' + dest_file])
+            if winPath.match(src_file):
+                src_file = winPath.sub(r'/\g<1>/\g<2>', src_file)
+            src_file = src_file.replace("\\", "/")
+            subprocess.check_call(['rsync', '-Ptz', '--inplace', '--rsh=ssh',
+                                   '--timeout=30', src_file,
                                    self.remote_server + ':' + dest_file])
         except CalledProcessError as _:
             return False
@@ -356,7 +365,7 @@ def main():
     try:
         chunk_size = human2bytes(args.size)
     except ValueError as e:
-        print 'Invalid chunk size ' + str(e)
+        print('Invalid chunk size ' + str(e))
         exit(1)
     num_threads = args.threads
     src_file = args.src
@@ -365,24 +374,26 @@ def main():
     retries = args.retries
 
     (dest_path, _) = os.path.split(dst_file)
+    if dest_path == "":
+        dest_path = "~/"
     (_ , src_filename) = os.path.split(src_file)
     remote_dest_file = os.path.join(dest_path, src_filename)
     remote_chunk_files = []
 
     # Check args for errors + instantiate variables.
     if not os.path.exists(src_file):
-        print 'Error: Source file does not exist', src_file
+        print('Error: Source file does not exist', src_file)
         exit(1)
     if not os.path.isfile(src_file):
-        print 'Error: Source is not a file', src_file
+        print('Error: Source is not a file', src_file)
         exit(1)
 
     src_file_size = os.stat(src_file).st_size
     # Split file and calc the file md5
     local_chunk_start_time = time.time()
-    print "spliting file"
+    print("spliting file")
     spinner = spinning_cursor()
-    sys.stdout.write(spinner.next())
+    sys.stdout.write(next(spinner))
     sys.stdout.flush()
     sys.stdout.write('\b')
     (src_file_info, chunk_infos) = split_file_and_md5(src_file,
@@ -390,20 +401,20 @@ def main():
                                                       chunk_size)
     src_file_md5 = src_file_info[1]
     local_chunk_end_time = time.time()
-    print "uploading MD5 ({0!s}) checksum to remote site".format(src_file_md5)
+    print("uploading MD5 ({0!s}) checksum to remote site".format(src_file_md5))
     try:
         checksum_filename = src_file + '.md5'
         dest_checksum_filename = os.path.join(dest_path, src_filename + '.md5')
         with open(checksum_filename, 'w+') as checksum_file:
             checksum_file.write(src_file_md5 + ' ' + src_filename)
-        print 'copying ' + src_file + ' to ' + dest_checksum_filename
+        print('copying ' + src_file + ' to ' + dest_checksum_filename)
         subprocess.check_call(['scp', '-c' + ssh_crypto, '-q',
                                 '-oBatchMode=yes', checksum_filename,
                                 remote_server + ':' + \
                                 dest_checksum_filename])
     except CalledProcessError as e:
         print(e.returncode)
-        print "ERROR: Couldn't connect to remote server."
+        print("ERROR: Couldn't connect to remote server.")
         exit(1)
 
     # Fill the queue of files to transfer
@@ -426,7 +437,7 @@ def main():
 
     # Kick off threads
     transfer_start_time = time.time()
-    print "starting transfers"
+    print("starting transfers")
     for i in range(num_threads):
         t = WorkerThread(q, dst_file, remote_server, ssh_crypto)
         t.daemon = True
@@ -435,7 +446,7 @@ def main():
     transfer_end_time = time.time()
 
     #join the chunks back together and check the md5
-    print "re-assembling file at remote end"
+    print("re-assembling file at remote end")
     remote_chunk_start_time = time.time()
     chunk_count = 0
     for (chunk_filename, chunk_md5) in chunk_infos:
@@ -452,35 +463,36 @@ def main():
 
         subprocess.call(['ssh', remote_server, 'cat', cmd])
         chunk_count += 1
-    print
-    print 're-assembled'
+    print()
+    print('re-assembled')
     remote_chunk_end_time = time.time()
 
-    print "checking remote file checksum"
+    print("checking remote file checksum")
     remote_checksum_start_time = time.time()
     try:
         # use openssl to be cross platform (OSX,Linux)
         checksum = subprocess.check_output(['ssh', remote_server, 'openssl',
                                             'md5', remote_dest_file])
         # MD5(2GB.mov)= d8ce4123aaacaec671a854f6ec74d8c0
-        if checksum.find(src_file_md5) != -1:
-            print 'PASSED checksums match'
+        print("checksum.find(src_file_md5):" + checksum.decode('utf-8').strip() + " - " + src_file_md5)
+        if checksum.decode('utf-8').strip().find(src_file_md5) != -1:
+            print('PASSED checksums match')
         else:
-            print 'ERROR: MD5s do not match local(' + src_file_md5 + \
-                  ') != (' + checksum.strip() + ')'
-            print '       File uploaded with errors - MD5 did not match.'
-            print '       local and remote chunks not cleared up'
+            print('ERROR: MD5s do not match local(' + src_file_md5 + \
+                  ') != (' + checksum.strip() + ')')
+            print('       File uploaded with errors - MD5 did not match.')
+            print('       local and remote chunks not cleared up')
             exit(1)
     except CalledProcessError as e:
         print(e.returncode)
-        print 'ERROR: File uploaded with errors - MD5 did not match.'
-        print '       local and remote chunks not cleared up'
+        print('ERROR: File uploaded with errors - MD5 did not match.')
+        print('       local and remote chunks not cleared up')
         exit(1)
 
     remote_checksum_end_time = time.time()
     # clean up
-    print "cleaning up"
-    print "removing file chunks"
+    print("cleaning up")
+    print("removing file chunks")
     for (local_chunk, remote_chunk, chunk_md5) in remote_chunk_files:
         spin("removing file chunk " + local_chunk)
         os.remove(local_chunk)
@@ -488,47 +500,47 @@ def main():
             subprocess.call(['ssh', remote_server, 'rm', remote_chunk])
         except CalledProcessError as e:
             print(e.returncode)
-            print 'ERROR: failed to remove remote chunk ' + remote_chunk
-    print ''
-    print "transfer complete"
+            print('ERROR: failed to remove remote chunk ' + remote_chunk)
+    print('')
+    print("transfer complete")
     end_time = time.time()
-    print "-" * 80
-    print "file size              :" + bytes2human(src_file_size) + "B"
-    print "transfer rate          :" + bytes2human(src_file_size /
+    print("-" * 80)
+    print("file size              :" + bytes2human(src_file_size) + "B")
+    print("transfer rate          :" + bytes2human(src_file_size /
                                                    int(transfer_end_time - \
-                                                   transfer_start_time)) + "B/s"
-    print "                       :" + bytes2human((src_file_size * 8) /
+                                                   transfer_start_time)) + "B/s")
+    print("                       :" + bytes2human((src_file_size * 8) /
                                                   int(transfer_end_time - \
-                                                  transfer_start_time)) + "b/s"
-    print "transfer time          :" + str(humanize_time_to_string( \
+                                                  transfer_start_time)) + "b/s")
+    print("transfer time          :" + str(humanize_time_to_string( \
                                            humanize_time( \
                                            int(transfer_end_time - \
                                            transfer_start_time),
-                                           "seconds")))
-    print "local chunking time    :" + str(humanize_time_to_string( \
+                                           "seconds"))))
+    print("local chunking time    :" + str(humanize_time_to_string( \
                                            humanize_time( \
                                            int(local_chunk_end_time - \
                                            local_chunk_start_time),
-                                           "seconds")))
-    print "remote reassembly time :" + str(humanize_time_to_string( \
+                                           "seconds"))))
+    print("remote reassembly time :" + str(humanize_time_to_string( \
                                            humanize_time( \
                                            int(remote_chunk_end_time - \
                                            remote_chunk_start_time),
-                                           "seconds")))
-    print "remote checksum time   :" + str(humanize_time_to_string(
+                                           "seconds"))))
+    print("remote checksum time   :" + str(humanize_time_to_string(
                                            humanize_time( \
                                            int(remote_checksum_end_time - \
                                            remote_checksum_start_time), \
-                                           "seconds")))
-    print "total transfer rate    :" + bytes2human(src_file_size / \
+                                           "seconds"))))
+    print("total transfer rate    :" + bytes2human(src_file_size / \
                                                    int(end_time - \
-                                                       start_time)) + "B/s"
-    print "                       :" + bytes2human((src_file_size * 8) / \
+                                                       start_time)) + "B/s")
+    print("                       :" + bytes2human((src_file_size * 8) / \
                                                    int(end_time - \
-                                                       start_time)) + "b/s"
-    print "total time             :" + str(humanize_time_to_string( \
+                                                       start_time)) + "b/s")
+    print("total time             :" + str(humanize_time_to_string( \
                                            humanize_time(int(end_time - \
-                                           start_time), "seconds")))
+                                           start_time), "seconds"))))
 
     exit(0)
 
