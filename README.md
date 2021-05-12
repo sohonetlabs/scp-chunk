@@ -16,7 +16,7 @@ Then join the chunks back together, check the checksum.
 then clean up all the chunks, at the local and remote ends.
 It will use at peak twice the disk space of the size of the file to be transferred at each end.
 
-##Requirements
+## Requirements
 Uses rsync or scp to transfer the files to the remote system in parrellel, and expects the user to be pre-keyed to the remote systems.
 [see article here on how to set this up]( http://hocuspokus.net/2008/01/ssh-shared-key-setup-ssh-logins-without-passwords/)
 
