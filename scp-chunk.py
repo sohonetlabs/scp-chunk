@@ -325,7 +325,7 @@ def human_sizes(size):
     except ValueError as _:
         msg = "Invalid size " + str(size) + " try 1G"
         raise argparse.ArgumentTypeError(msg)
-    return chunk_size
+    return size
 
 
 def main():
@@ -363,7 +363,8 @@ def main():
     parser.add_argument('dst',
                         help='directory (if remote home dir then specify . )')
     parser.add_argument("--use_rsync", 
-                        action="store_true", 
+                        action="store_true",
+                        default=False, 
                         help="Use rsync instead of scp, scp is being deprecated")
     
     args = parser.parse_args()
