@@ -15,8 +15,9 @@ winPath = re.compile('^(\w)\:[\\/](.*)$', re.IGNORECASE)
 
 default_num_threads = 3
 default_retries = 0
-default_cypher = 'aes128-cbc'
+default_cypher = 'aes128-ctr'
 split_file_basename = 'chunk_'
+use_rsync = False
 
 INTERVALS = [1, 60, 3600, 86400, 604800, 2419200, 29030400]
 NAMES = [('second', 'seconds'),
