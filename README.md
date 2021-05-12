@@ -31,12 +31,12 @@ It is expected that the remote shell will provide access to the following comman
 * [openssl](https://linux.die.net/man/1/openssl) usage to calculate checksum: **openssl md5 \<filename>**
 * [cat](https://linux.die.net/man/1/cat) usage to reassemble chunks: **cat \<filename> >> \<filename>**
 * [rm](https://linux.die.net/man/1/rm) usage to remove chunks: **rm \<filename>**
-* [rsync](inux.die.net/man/1/rsync) usage to transfer chunks, use --use_rsync  
+* [rsync](https://linux.die.net/man/1/rsync) usage to transfer chunks, use --use_rsync  
 
 ##### local system
 
 * [scp](https://linux.die.net/man/1/scp) to copy files to remote system.
-* [rsync](inux.die.net/man/1/rsync) usage to transfer chunks, use --use_rsync  
+* [rsync](https://linux.die.net/man/1/rsync) usage to transfer chunks, use --use_rsync  
 
 ## Usage
 
