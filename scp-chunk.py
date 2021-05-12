@@ -381,8 +381,8 @@ def main():
     dst_file = args.dst
     remote_server = args.srv
     retries = args.retries
+    global use_rsync
     use_rsync = args.use_rsync
-
     (dest_path, _) = os.path.split(dst_file)
     if dest_path == "":
         dest_path = "~/"
